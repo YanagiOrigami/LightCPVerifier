@@ -161,6 +161,23 @@ go-judge --mount-conf=mount.yaml
 
 ---
 
+### 获得Submissions
+
+`GET /submissions/expert`
+返回 tar.gz 压缩包
+
+---
+
+### 获得全部题目&题面
+
+`GET /problems`
+`GET /problems?statement=true`
+返回题目和题面
+
+---
+
+
+
 ## 环境变量
 
 | 变量名             | 默认值                   | 说明 |
