@@ -51,7 +51,8 @@ COPY package.json package-lock.json* ./
 RUN npm install --only=production --ignore-scripts
 
 # --- 5. 拷贝应用代码和入口脚本 ---
-COPY index.js entrypoint.sh ./
+COPY server.js entrypoint.sh ./
+COPY src/ ./src/
 COPY include/ ./include/
 COPY config/ ./config/
 COPY include/ /lib/testlib/

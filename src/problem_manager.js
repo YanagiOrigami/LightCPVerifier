@@ -2,6 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import YAML from 'js-yaml';
 import unzipper from 'unzipper';
+import { createReadStream } from 'node:fs';
+import tar from 'tar';
 
 import { dirExists, ensureDir, parseProblemConf, fileExists, findTestCases} from './utils.js';
 
@@ -148,7 +150,7 @@ export class ProblemSetter {
 
     // 移动所有文件
     async moveAllFiles(srcDir, destDir) {
-        await this.ensureDir(destDir);
+        await ensureDir(destDir);
         const files = await fs.readdir(srcDir);
         
         for (const file of files) {
@@ -218,7 +220,7 @@ export class ProblemSetter {
         console.log(`Found ${testCases.length} test case pairs`);
         
         const testdataDir = path.join(this.tarDir, 'testdata');
-        await this.ensureDir(testdataDir);
+        await ensureDir(testdataDir);
         
         // 复制并重命名测试用例
         const cases = [];
@@ -228,13 +230,13 @@ export class ProblemSetter {
             
             // 复制输入文件
             await this.copyFile(
-                path.join(problemDir, testCase.input),
+                path.join(this.dataDir, testCase.input),
                 path.join(testdataDir, `${newIndex}.in`)
             );
             
             // 复制输出文件
             await this.copyFile(
-                path.join(problemDir, testCase.output),
+                path.join(this.dataDir, testCase.output),
                 path.join(testdataDir, `${newIndex}.ans`)
             );
             
@@ -263,8 +265,8 @@ export class ProblemSetter {
         };
         
         // 写入配置文件
-        const configPath = path.join(targetDir, 'config.yaml');
-        await fs.writeFile(configPath, YAML.stringify(config), 'utf8');
+        const configPath = path.join(this.tarDir, 'config.yaml');
+        await fs.writeFile(configPath, YAML.dump(config), 'utf8');
 
         // 复制其他必要文件（如 checker.cpp, statement.txt 等）
         const otherFiles = ['checker.cpp', 'statement.txt', 'chk.cc', 'chk.cpp'];
@@ -280,7 +282,6 @@ export class ProblemSetter {
         
         return {
             mode: 'hard',
-            pid,
             targetDir: this.tarDir,
             testCases: testCases.length,
             timeLimit,
@@ -291,17 +292,17 @@ export class ProblemSetter {
     // 主入口
     async setProblem() {
         // 检查题目目录是否存在
-        if (!(await fileExists(problemDir))) {
-            throw new Error(`Problem directory not found: ${problemDir}`);
+        if (!(await fileExists(this.dataDir))) {
+            throw new Error(`Problem directory not found: ${this.dataDir}`);
         }
         
         // 检查是否有 config.yaml（Easy 模式）
-        const configPath = path.join(problemDir, 'config.yaml');
+        const configPath = path.join(this.dataDir, 'config.yaml');
         if (await fileExists(configPath)) {
-            return await this.setEasyMode(pid, problemDir);
+            return await this.setEasyMode();
         } else {
             // Hard 模式
-            return await this.setHardMode(pid, problemDir);
+            return await this.setHardMode();
         }
     }
 }
@@ -314,7 +315,7 @@ export class ProblemManager {
     // 加载单个题目
     async loadProblem(pid) {
         const pdir = path.join(this.problemsRoot, pid);
-        return ProblemConfig().loadProblem(pdir);
+        return new ProblemConfig().loadProblem(pdir);
     }
 
     // 获取题面
@@ -390,11 +391,11 @@ export class ProblemManager {
             throw new Error('No zip file provided');
         }
 
-        if (zipfile instanceof Buffer) {
+        /*if (zipfile instanceof Buffer) {
             const tempZipPath = path.join(pdir, 'temp.zip');
             await fs.writeFile(tempZipPath, zipfile);
             zipfile = String(tempZipPath);
-        }
+        }*/
 
         if (typeof zipfile === 'string') {
             // 处理字符串路径
@@ -404,7 +405,7 @@ export class ProblemManager {
             }
             const tmpDir = path.join(pdir, "tmp_" + pid);
             // 解压缩到 tmpDir 目录
-            await fs.createReadStream(zipPath)
+            await createReadStream(zipPath)
                 .pipe(unzipper.Extract({ path: tmpDir }))
                 .promise();
 
@@ -417,8 +418,14 @@ export class ProblemManager {
                 await fs.rm(tmpDir, { recursive: true, force: true });
                 throw new Error(`Failed to set problem: ${error.message}`);
             }
+            await fs.rm(tmpDir, { recursive: true, force: true });
         }
-
+        await tar.c({
+            gzip: true,
+            file: path.join(pdir, `${pid}.tar.gz`)  // 就是输出位置
+        },
+        [pdir]
+        );
         return { message: 'Problem setup completed successfully', pid };
     }
 
@@ -432,10 +439,13 @@ export class ProblemManager {
         await fs.mkdir(pdir, { recursive: true });
 
         if (zipfile) {
-            await this.setupProblem(pid, zipfile);
+            try{
+                await this.setupProblem(pid, zipfile);
+            } catch (error) {
+                throw new Error(`Failed to setup problem: ${error.message}`);
+            }
             return { message: 'Problem added and setup successfully', pid };
         }
-
         return { message: 'Problem added successfully', pid };
     }
 

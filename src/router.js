@@ -1,17 +1,20 @@
 import express from 'express';
 import tar from 'tar';
-import { emptyDir } from 'utils.js';
+import { emptyDir } from './utils.js';
+import { uploadZip, upload } from './upload.js';
 
 export function createApiRoutes(judgeEngine, problemManager, submissionManager) {
     const router = express.Router();
 
     // 提交代码
-    router.post('/submit', async (req, res) => {
-        const { pid, lang, code } = req.body || {};
+    router.post('/submit', upload.single('code'), async (req, res) => {
+        const { pid, lang } = req.body || {};
+        const codeBuf = req.file?.buffer;
+        const code = codeBuf?.toString('utf8');
+
         if (!pid || !lang || !code) {
             return res.status(400).json({ error: 'pid/lang/code required' });
         }
-
         try {
             const sid = await judgeEngine.submit(pid, lang, code);
             res.json({ sid });
@@ -29,15 +32,20 @@ export function createApiRoutes(judgeEngine, problemManager, submissionManager) 
 
         try {
             const result = await judgeEngine.getResult(sid);
-            if (result) {
-                res.json(result);
-            } else {
-                res.status(404).json({ error: 'not found' });
+            if (!result) {
+                return res.status(404).json({ error: 'not found' });
             }
+            if (req.query.short) {
+                const { status, passed } = result;
+                return res.json({ status, passed });
+            }
+
+            res.json(result);
         } catch (error) {
             res.status(500).json({ error: 'Failed to get result', message: error.message });
         }
     });
+
 
     // 获取题面
     router.get('/problem/:pid/statement', async (req, res) => {
@@ -92,12 +100,9 @@ export function createApiRoutes(judgeEngine, problemManager, submissionManager) 
     // 重置 submissions
     router.post('/submissions/reset', async (req, res) => {
         try {
-            // 清空 submissions 目录
             await emptyDir(submissionManager.submissionsRoot);
-            
-            // 重置 counter
             await submissionManager.resetCounter();
-            
+
             // 清空内存中的结果缓存
             judgeEngine.clearResults();
             
@@ -114,31 +119,34 @@ export function createApiRoutes(judgeEngine, problemManager, submissionManager) 
         }
     });
 
-    router.post('/problem/setup', async (req, res) => {
-        const { pid, zipfile } = req.body || {};
+    router.post('/problem/setup', uploadZip, async (req, res) => {
+        const { pid } = req.body || {};
+        const zipPath = req.file?.path || null;
+
         if (!pid) {
             return res.status(400).json({ error: 'pid is required' });
         }
         try {
-            await problemManager.setupProblem(pid, zipfile);
+            await problemManager.setupProblem(pid, zipPath);
             res.json({ message: 'Problem setup successfully', pid });
         } catch (error) {
             res.status(500).json({ error: 'Failed to setup problem', message: error.message });
         }
     });
 
-    router.post('/problem/add-problem', async (req, res) => {
-        const {pid} = req.body || {};
-        if (!pid) {
-            return res.status(400).json({ error: 'pid is required' });
-        }
+    router.post('/problem/add-problem', uploadZip, async (req, res) => {
         try {
-            const result = await problemManager.addProblem(pid, req.body);
-            res.json(result);
-        } catch (error) {
-            res.status(500).json({ error: 'Failed to add problem', message: error.message });
-        }
+            const { pid } = req.body || {};
+            if (!pid) {
+                return res.status(400).json({ error: 'pid is required' });
+            }
 
+            const zipfilePath = req.file?.path || null;       // /tmp/uploads/xxx.zip
+            const result = await problemManager.addProblem(pid, zipfilePath, {});
+            return res.json(result);
+        } catch (error) {
+            return res.status(500).json({ error: 'Failed to add problem', message: error.message });
+        }
     });
 
     router.get('/package/:pid' , async (req, res) => {

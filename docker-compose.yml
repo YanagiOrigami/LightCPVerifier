@@ -4,7 +4,7 @@ services:
     build: .
     container_name: LightCPVerifier
     privileged: true              # go-judge 需要
-    shm_size: "2g"                # 建议>=2G
+    shm_size: "4g"                # 建议>=2G
     environment:
       PORT: "8081"                # orchestrator API 端口
       GJ_ADDR: "http://127.0.0.1:5050"

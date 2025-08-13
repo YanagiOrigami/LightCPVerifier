@@ -4,9 +4,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { SubmissionManager } from './src/utils.js';
-import { ProblemManager } from './src/problemManager.js';
-import { JudgeEngine } from './src/judgeEngine.js';
-import { createApiRoutes } from './src/apiRoutes.js';
+import { ProblemManager } from './src/problem_manager.js';
+import { JudgeEngine } from './src/judge_engine.js';
+import { createApiRoutes } from './src/router.js';
 
 // 初始化配置
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

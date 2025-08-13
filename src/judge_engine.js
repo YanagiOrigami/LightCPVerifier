@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { toNs, toBytes } from './utils.js';
 import { GoJudgeClient } from './gojudge.js';
-import { ProblemManager } from './problemManager.js';
+import { ProblemManager } from './problem_manager.js';
 
 export class JudgeEngine {
     constructor(config) {
