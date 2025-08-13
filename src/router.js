@@ -115,12 +115,12 @@ export function createApiRoutes(judgeEngine, problemManager, submissionManager) 
     });
 
     router.post('/problem/setup', async (req, res) => {
-        const { pid,  } = req.body || {};
+        const { pid, zipfile } = req.body || {};
         if (!pid) {
             return res.status(400).json({ error: 'pid is required' });
         }
         try {
-            await problemManager.setupProblem(pid);
+            await problemManager.setupProblem(pid, zipfile);
             res.json({ message: 'Problem setup successfully', pid });
         } catch (error) {
             res.status(500).json({ error: 'Failed to setup problem', message: error.message });

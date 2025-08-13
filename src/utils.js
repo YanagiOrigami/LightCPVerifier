@@ -39,6 +39,83 @@ export async function dirExists(pdir) {
   }
 }
 
+export async function fileExists(filePath) {
+    try {
+        await fs.stat(filePath);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function ensureDir(dirPath) {
+    try {
+        await fs.mkdir(dirPath, { recursive: true });
+    } catch (err) {
+        if (err.code !== 'EEXIST') throw err;
+    }
+}
+
+export async function parseProblemConf(confPath) {
+    const content = await fs.readFile(confPath, 'utf8');
+    const lines = content.split('\n');
+    const conf = {};
+    
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        
+        const [key, ...valueParts] = trimmed.split(/\s+/);
+        const value = valueParts.join(' ');
+        
+        if (key && value) {
+            conf[key.toLowerCase()] = value;
+        }
+    }
+    
+    return conf;
+}
+
+export async function findTestCases(dir) {
+        const files = await fs.readdir(dir);
+        const testCases = new Map();
+        
+        // 查找所有 .in 文件
+        for (const file of files) {
+            if (file.endsWith('.in')) {
+                const baseName = file.slice(0, -3);
+                testCases.set(baseName, { input: file, output: null });
+            }
+        }
+        
+        // 查找对应的 .ans 或 .out 文件
+        for (const file of files) {
+            if (file.endsWith('.ans') || file.endsWith('.out')) {
+                const baseName = file.endsWith('.ans') ? file.slice(0, -4) : file.slice(0, -4);
+                if (testCases.has(baseName)) {
+                    testCases.get(baseName).output = file;
+                }
+            }
+        }
+        
+        // 过滤出完整的测试用例对
+        const validCases = [];
+        for (const [baseName, caseFiles] of testCases) {
+            if (caseFiles.input && caseFiles.output) {
+                validCases.push({
+                    baseName,
+                    input: caseFiles.input,
+                    output: caseFiles.output
+                });
+            }
+        }
+        
+        // 按字典序排序
+        validCases.sort((a, b) => a.baseName.localeCompare(b.baseName));
+        
+        return validCases;
+    }
+
 // 提交ID生成和路径管理
 export class SubmissionManager {
     constructor(dataRoot, submissionsRoot, bucketSize = 100) {
