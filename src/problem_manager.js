@@ -4,6 +4,7 @@ import YAML from 'js-yaml';
 import unzipper from 'unzipper';
 import { createReadStream } from 'node:fs';
 import tar from 'tar';
+//import StreamZip from 'node-stream-zip';
 
 import { dirExists, ensureDir, parseProblemConf, fileExists, findTestCases} from './utils.js';
 
@@ -391,12 +392,6 @@ export class ProblemManager {
             throw new Error('No zip file provided');
         }
 
-        /*if (zipfile instanceof Buffer) {
-            const tempZipPath = path.join(pdir, 'temp.zip');
-            await fs.writeFile(tempZipPath, zipfile);
-            zipfile = String(tempZipPath);
-        }*/
-
         if (typeof zipfile === 'string') {
             // 处理字符串路径
             const zipPath = path.resolve(zipfile);
@@ -404,32 +399,21 @@ export class ProblemManager {
                 throw new Error(`Zip file ${zipPath} does not exist`);
             }
             const tmpDir = path.join(pdir, "tmp_" + pid);
-            // 解压缩到 tmpDir 目录
-            try{
-                await new Promise((resolve, reject) => {
-                createReadStream(zipPath)
-                    .pipe(unzipper.Extract({ path: tmpDir }))
-                    .on('close', resolve)
-                    .on('error', reject);
-                });
+            try {
+                const directory = await unzipper.Open.file(zipPath);
+                await directory.extract({ path: tmpDir })   ;
+                const files = await fs.readdir(tmpDir, { recursive: true });
             } catch (error) {
                 throw new Error(`Failed to unzip file: ${error.message}`);
             }
-
-            // await createReadStream(zipPath)
-            //     .pipe(unzipper.Extract({ path: tmpDir }))
-            //     .promise();
-
             await fs.unlink(zipPath);
-            
             let Setter = new ProblemSetter(tmpDir, pdir);
-            try{
+            try {
                 await Setter.setProblem();
             } catch (error) {
                 await fs.rm(tmpDir, { recursive: true, force: true });
                 throw new Error(`Failed to set problem: ${error.message}`);
             }
-
             await fs.rm(tmpDir, { recursive: true, force: true });
         }
         await tar.c({
