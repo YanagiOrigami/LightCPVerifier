@@ -64,8 +64,8 @@ RUN chmod +x entrypoint.sh && sed -i 's/\r$//' entrypoint.sh
 # 这些变量可以在 docker-compose.yml 中被覆盖
 ENV PORT=8081
 ENV GJ_ADDR=http://127.0.0.1:5050
-ENV JUDGE_WORKERS=4
-ENV GJ_PARALLELISM=4
+ENV JUDGE_WORKERS=$(nproc)
+ENV GJ_PARALLELISM=$(nproc)
 
 # --- 7. 设置容器入口点 ---
 ENTRYPOINT ["/app/entrypoint.sh"]
