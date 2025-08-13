@@ -4,4 +4,4 @@ set -euo pipefail
 /usr/local/bin/go-judge -parallelism "${GJ_PARALLELISM}" &
 sleep 0.5
 # 启动 orchestrator
-node /app/index.js
+node /app/server.js
