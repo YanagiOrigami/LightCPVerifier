@@ -186,10 +186,10 @@ export class ProblemSetter {
         return { mode: 'easy', targetDir: this.tarDir };
     }
 
-    // Hard 模式：生成配置并整理文件
-    async setHardMode() {
-        console.log(`Setting problem in HARD mode`);
-        
+    // Free 模式：生成配置并整理文件
+    async setFreeMode() {
+        console.log(`Setting problem in FREE mode`);
+
         // 默认配置
         let timeLimit = '2s';
         let memoryLimit = '512m';
@@ -277,11 +277,11 @@ export class ProblemSetter {
             }
         }
 
-        console.log(`Problem set successfully in HARD mode`);
+        console.log(`Problem set successfully in FREE mode`);
         console.log(`Generated config with ${testCases.length} test cases`);
         
         return {
-            mode: 'hard',
+            mode: 'free',
             targetDir: this.tarDir,
             testCases: testCases.length,
             timeLimit,
@@ -301,8 +301,8 @@ export class ProblemSetter {
         if (await fileExists(configPath)) {
             return await this.setEasyMode();
         } else {
-            // Hard 模式
-            return await this.setHardMode();
+            // Free 模式
+            return await this.setFreeMode();
         }
     }
 }
@@ -405,9 +405,20 @@ export class ProblemManager {
             }
             const tmpDir = path.join(pdir, "tmp_" + pid);
             // 解压缩到 tmpDir 目录
-            await createReadStream(zipPath)
-                .pipe(unzipper.Extract({ path: tmpDir }))
-                .promise();
+            try{
+                await new Promise((resolve, reject) => {
+                createReadStream(zipPath)
+                    .pipe(unzipper.Extract({ path: tmpDir }))
+                    .on('close', resolve)
+                    .on('error', reject);
+                });
+            } catch (error) {
+                throw new Error(`Failed to unzip file: ${error.message}`);
+            }
+
+            // await createReadStream(zipPath)
+            //     .pipe(unzipper.Extract({ path: tmpDir }))
+            //     .promise();
 
             await fs.unlink(zipPath);
             
@@ -418,6 +429,7 @@ export class ProblemManager {
                 await fs.rm(tmpDir, { recursive: true, force: true });
                 throw new Error(`Failed to set problem: ${error.message}`);
             }
+
             await fs.rm(tmpDir, { recursive: true, force: true });
         }
         await tar.c({

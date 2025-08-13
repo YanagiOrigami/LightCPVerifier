@@ -80,6 +80,8 @@ export async function findTestCases(dir) {
         const files = await fs.readdir(dir);
         const testCases = new Map();
         
+        //testing.
+        //throw new Error('The test cases:' + JSON.stringify(files));
         // 查找所有 .in 文件
         for (const file of files) {
             if (file.endsWith('.in')) {
@@ -113,6 +115,9 @@ export async function findTestCases(dir) {
         // 按字典序排序
         validCases.sort((a, b) => a.baseName.localeCompare(b.baseName));
         
+        //testing.
+        //throw new Error('The test cases:' + JSON.stringify(validCases));
+
         return validCases;
     }
 
