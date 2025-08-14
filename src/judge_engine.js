@@ -1,12 +1,16 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { toNs, toBytes } from './utils.js';
+import { toNs, toBytes, fileExists } from './utils.js';
 import { GoJudgeClient } from './gojudge.js';
 import { ProblemManager } from './problem_manager.js';
 
 export class JudgeEngine {
     constructor(config) {
-        this.problemManager = new ProblemManager(config.problemsRoot);
+        this.problemManager = new ProblemManager({
+            problemsRoot: config.problemsRoot,
+            gjAddr: config.gjAddr,
+            testlibPath: config.testlibPath
+        });
         this.goJudge = new GoJudgeClient(config.gjAddr);
         this.submissionManager = config.submissionManager;
         this.testlibPath = config.testlibPath || '/lib/testlib';
@@ -77,7 +81,7 @@ export class JudgeEngine {
         const runRes = await this.goJudge.runOne({
             args: runSpec.runArgs,
             env: ['PATH=/usr/bin:/bin'],
-            files: [{ content: inf }, { name: 'stdout', max: 1024 * 1024 * 1024 }, { name: 'stderr', max: 1024 * 1024 }],
+            files: [{ content: inf }, { name: 'stdout', max: 128 * 1024 * 1024 }, { name: 'stderr', max: 1024 * 1024 }],
             cpuLimit: toNs(caseItem.time),
             clockLimit: toNs(caseItem.time) * 2,
             memoryLimit: toBytes(caseItem.memory),
@@ -96,13 +100,14 @@ export class JudgeEngine {
         }
 
         const out = runRes.files?.stdout ?? '';
-
+        
         // checker（testlib）运行：chk in.txt out.txt ans.txt
         const chkRes = await this.goJudge.runOne({
             args: ['chk', 'in.txt', 'out.txt', 'ans.txt'],
             env: ['PATH=/usr/bin:/bin'],
             files: [{ content: '' }, { name: 'stdout', max: 1024 * 1024 }, { name: 'stderr', max: 1024 * 1024 }],
-            cpuLimit: 2e9, 
+            cpuLimit: 2e9,
+            clockLimit: 4e9,
             memoryLimit: 256 << 20, 
             procLimit: 10,
             copyIn: {
@@ -162,9 +167,17 @@ export class JudgeEngine {
                 });
                 cleanupIds.push(...(runSpec.cleanupIds || []));
 
-                // 编译 checker（沙箱内）
-                const chkSrc = await this.problemManager.readCheckerSource(pid, problem.checker);
-                const checkerResult = await this.goJudge.prepareChecker(chkSrc, this.testlibPath);
+                
+                // 读取 checker.bin 文件（如果存在）
+                const checkerBinPath = path.join(problem.pdir, `${problem.checker}.bin`);
+                let checkerResult;
+                if (await fileExists(checkerBinPath)) {
+                    checkerResult = await this.goJudge.copyInChecker(checkerBinPath);
+                } else if (problem.checker) {
+                    // 否则读取 checker 源码并编译
+                    const chkSrc = await this.problemManager.readCheckerSource(pid, problem.checker);
+                    checkerResult = await this.goJudge.prepareChecker(chkSrc, this.testlibPath);
+                }
                 const { checkerId, cleanup } = checkerResult;
                 checkerCleanup = cleanup;
 

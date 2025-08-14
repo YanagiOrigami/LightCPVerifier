@@ -32,7 +32,11 @@ const submissionManager = new SubmissionManager(
     config.bucketSize
 );
 
-const problemManager = new ProblemManager(config.problemsRoot);
+const problemManager = new ProblemManager({
+    problemsRoot: config.problemsRoot,
+    gjAddr: config.gjAddr,
+    testlibPath: config.testlibPath
+});
 
 const judgeEngine = new JudgeEngine({
     problemsRoot: config.problemsRoot,

@@ -2,9 +2,8 @@ import fs from 'fs/promises';
 import path from 'path';
 import YAML from 'js-yaml';
 import unzipper from 'unzipper';
-import { createReadStream } from 'node:fs';
 import tar from 'tar';
-//import StreamZip from 'node-stream-zip';
+import { GoJudgeClient } from './gojudge.js';
 
 import { dirExists, ensureDir, parseProblemConf, fileExists, findTestCases} from './utils.js';
 
@@ -34,6 +33,7 @@ export class ProblemConfig {
         if (!this.config.subtasks || !Array.isArray(this.config.subtasks)) {
             throw new Error('config.yaml must define subtasks');
         }
+        return this.config;
     }
 
     async loadSubtasks() {
@@ -94,6 +94,7 @@ export class ProblemConfig {
         // 设置 checker 和 filename
         this.checker = this.config.checker || 'chk.cc';
         this.filename = this.config.filename || null;
+        
     }
 
     async loadLeetcode() {
@@ -174,7 +175,7 @@ export class ProblemSetter {
         
         try {
             // 验证配置是否正确
-            await loader.loadProblem();
+            await loader.loadProblem(this.dataDir);
             console.log(`Configuration validated`);
         } catch (err) {
             throw new Error(`Configuration validation failed: ${err.message}`);
@@ -194,6 +195,20 @@ export class ProblemSetter {
         // 默认配置
         let timeLimit = '2s';
         let memoryLimit = '512m';
+
+        let checker_name = null;
+        const candidates = ['checker.cpp', 'checker.cc', 'chk.cpp', 'chk.cc'];
+
+        for (const fname of candidates) {
+            const fpath = path.join(this.dataDir, fname);
+            if (await fileExists(fpath)) {
+                checker_name = fname;
+                break; 
+            }
+        }
+        if (!checker_name) {
+            throw new Error('No checker source file found (expected one of: ' + candidates.join(', ') + ')');
+        }
         
         // 尝试读取 problem.conf
         const confPath = path.join(this.dataDir, 'problem.conf');
@@ -252,7 +267,7 @@ export class ProblemSetter {
             type: 'default',
             time_limit: timeLimit,
             memory_limit: memoryLimit,
-            checker: 'checker.cpp',
+            checker: checker_name,
             input_prefix: '',
             output_prefix: '',
             input_suffix: '.in',
@@ -309,8 +324,12 @@ export class ProblemSetter {
 }
 
 export class ProblemManager {
-    constructor(problemsRoot) {
-        this.problemsRoot = problemsRoot;
+    constructor(config) {
+        this.problemsRoot = config.problemsRoot;
+        this.gjAddr = config.gjAddr || 'http://localhost:8080';
+        this.testlibPath = config.testlibPath || '/lib/testlib';
+
+        this.goJudge = new GoJudgeClient(config.gjAddr);
     }
 
     // 加载单个题目
@@ -416,6 +435,23 @@ export class ProblemManager {
             }
             await fs.rm(tmpDir, { recursive: true, force: true });
         }
+
+        let config = null;
+        try {
+            config = await new ProblemConfig(pdir).loadConfig(path.join(pdir, 'config.yaml'));
+        } catch (error) {
+            throw new Error(`Failed to load problem config: ${error.message}`);
+        }
+        const checker_name = config.checker || null;
+        const checker_source = await this.readCheckerSource(pid, checker_name);
+        try {
+            const checkerBin = await this.goJudge.getCheckerBin(checker_source, config.testlibPath);
+            const checkerBinPath = path.join(pdir, `${checker_name}.bin`);
+            await fs.writeFile(checkerBinPath, checkerBin);
+        } catch (error) {
+            throw new Error(`Failed to get checker binary: ${error.message}`);
+        }
+
         await tar.c({
             gzip: true,
             file: path.join(pdir, `${pid}.tar.gz`)  // 就是输出位置

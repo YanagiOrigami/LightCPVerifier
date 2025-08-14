@@ -1,4 +1,9 @@
 import axios from 'axios';
+import fs from 'fs/promises';
+import path from 'path';
+import FormData from 'form-data';
+import {createReadStream} from 'fs';
+
 
 export class GoJudgeClient {
     constructor(baseURL = 'http://127.0.0.1:5050') {
@@ -17,6 +22,32 @@ export class GoJudgeClient {
             await axios.delete(`${this.baseURL}/file/${encodeURIComponent(fileId)}`); 
         } catch { }
     }
+
+    // 获取文件内容
+    async getFileContent(fileId) {
+        const { data } = await axios.get(`${this.baseURL}/file/${encodeURIComponent(fileId)}`, { responseType: 'arraybuffer' });
+        return data;
+    }
+
+    // 上传文件
+    async copyInFile(filePath) {
+        try {
+            const form = new FormData();
+            // 'file' 是后端要求的字段名，fs.createReadStream 用于高效读取文件
+            form.append('file', createReadStream(filePath));
+            // 使用 await 等待 post 请求完成
+            const { data } = await axios.post(`${this.baseURL}/file`, form, {
+                headers: {
+                    ...form.getHeaders() // form-data 库会生成必要的 multipart headers
+                }
+            });
+            return data;
+        } catch (error) {
+            console.error(`上传文件 ${filePath} 失败:`, error.message);
+            throw error; // 向上抛出异常，让调用者可以处理
+        }
+    }
+
 
     // 缓存单个文件
     async cacheSingleFile(name, content) {
@@ -154,5 +185,31 @@ export class GoJudgeClient {
             interactorId,
             cleanup: () => this.deleteFile(interactorId)
         };
+    }
+
+    async getCheckerBin(checkerSourceText, testlibPath = '/lib/testlib', srcName = 'chk.cc') {
+        const { checkerId, cleanup } = await this.prepareChecker(checkerSourceText, testlibPath, srcName);
+        const checkerBin = await this.getFileContent(checkerId);
+        cleanup();
+        return checkerBin;
+    }
+
+    async getInteractorBin(interactorSourceText, testlibPath = '/lib/testlib', srcName = 'interactor.cc') {
+        const { interactorId, cleanup } = await this.prepareInteractor(interactorSourceText, testlibPath, srcName);
+        const interactorBin = await this.getFileContent(interactorId);
+        cleanup();
+        return interactorBin;
+    }
+
+    async copyInChecker(checkerBinPath, testlibPath = '/lib/testlib', srcName = 'chk.cc') {
+        if (!checkerBinPath) {
+            throw new Error('checkerBinPath is required');
+        }
+        const checkerId = await this.copyInFile(checkerBinPath);
+        if (!checkerId) {
+            throw new Error('Failed to copy in checker binary');
+        }
+        const cleanup = () => this.deleteFile(checkerId);
+        return { checkerId, cleanup };
     }
 }
