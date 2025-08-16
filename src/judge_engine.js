@@ -27,11 +27,20 @@ export class JudgeEngine {
     async submit(pid, lang, code) {
         const sid = await this.submissionManager.nextSubmissionId();
         this.results.set(sid, { status: 'queued' });
-        this.queue.push({ sid, pid, lang, code });
-
         const { bucketDir, subDir } = this.submissionManager.submissionPaths(sid);
         await fs.mkdir(bucketDir, { recursive: true });
         await fs.mkdir(subDir, { recursive: true });
+
+        if(this.queue.length >= 1024 * 512){
+            this.queue.push({ sid, pid, lang });
+            await fs.writeFile(
+                path.join(subDir, `source.code`),
+                code
+            );
+        }else{
+            this.queue.push({ sid, pid, lang, code });
+        }
+
         await fs.writeFile(
             path.join(subDir, 'meta.json'), 
             JSON.stringify({ sid, pid, lang, ts: Date.now() }, null, 2)
@@ -144,10 +153,14 @@ export class JudgeEngine {
                 continue; 
             }
 
-            const { sid, pid, lang, code } = job;
+            let { sid, pid, lang, code } = job;
             const { bucketDir, subDir } = this.submissionManager.submissionPaths(sid);
-            await fs.mkdir(bucketDir, { recursive: true });
-            await fs.mkdir(subDir, { recursive: true });
+            if(code === null){
+                code = await fs.readFile(path.join(subDir, `source.code`), 'utf8');
+            }else{
+                await fs.writeFile(path.join(subDir, `source.code`), code);
+            }
+            
 
             let cleanupIds = [];
             let checkerCleanup = null;
@@ -156,8 +169,8 @@ export class JudgeEngine {
                 const problem = await this.problemManager.loadProblem(pid);
 
                 // 归档源码
-                const srcName = this.getSourceFileName(lang);
-                await fs.writeFile(path.join(subDir, srcName), code);
+                //const srcName = this.getSourceFileName(lang);
+                //await fs.writeFile(path.join(subDir, srcName), code);
 
                 // 准备选手程序（沙箱内编译/缓存）
                 const runSpec = await this.goJudge.prepareProgram({ 
@@ -193,8 +206,9 @@ export class JudgeEngine {
                     }
                 }
                 const passed = firstBad === null;
+                const result = caseResults[caseResults.length - 1].status || 'Unknown';
 
-                const final = { status: 'done', passed, cases: caseResults };
+                const final = { status: 'done', passed, result, cases: caseResults };
                 this.results.set(sid, final);
                 await fs.writeFile(path.join(subDir, 'result.json'), JSON.stringify(final, null, 2));
             } catch (e) {

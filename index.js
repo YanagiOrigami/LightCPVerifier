@@ -132,7 +132,7 @@ async function prepareProgramInSandbox({ lang, code, mainName = null }) {
         };
     }
 
-    if (lang === 'py' || lang === 'pypy') {
+    if (lang === 'py' || lang === 'pypy' || lang === 'python' || lang === 'python3') {
         const srcName = mainName || 'main.py';
         const fileId = await cacheSingleFile(srcName, code);
         const interp = (lang === 'pypy') ? '/usr/bin/pypy3' : '/usr/bin/python3';

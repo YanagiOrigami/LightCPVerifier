@@ -75,7 +75,7 @@ export class GoJudgeClient {
         if (lang === 'java') {
             return await this._prepareJava(code, mainName);
         }
-        if (lang === 'py' || lang === 'pypy') {
+        if (lang === 'py' || lang === 'pypy' || lang === 'python' || lang === 'python3') {
             return await this._preparePython(code, mainName, lang);
         }
         throw new Error('unsupported lang');
