@@ -155,10 +155,10 @@ export class JudgeEngine {
 
             let { sid, pid, lang, code } = job;
             const { bucketDir, subDir } = this.submissionManager.submissionPaths(sid);
-            if(code === null){
-                code = await fs.readFile(path.join(subDir, `source.code`), 'utf8');
-            }else{
-                await fs.writeFile(path.join(subDir, `source.code`), code);
+            if (typeof code !== 'string') {
+                code = await fs.readFile(path.join(subDir, 'source.code'), 'utf8');
+            } else {
+                await fs.writeFile(path.join(subDir, 'source.code'), code);
             }
             
 
