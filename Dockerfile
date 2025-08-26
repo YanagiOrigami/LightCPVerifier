@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # 使用官方 Ubuntu 22.04 作为基础镜像
-FROM ubuntu:22.04
+FROM --platform=linux/amd64 ubuntu:22.04
 
 # 设置环境变量，避免在 apt-get 安装过程中出现交互式提示
 ENV DEBIAN_FRONTEND=noninteractive
@@ -19,7 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     python3 \
     python3-pip \
+    pypy3 \
     openjdk-17-jdk \
+    kotlin \
+    rustc \
+    cargo \
+    golang \
     # 安装 Node.js 20.x
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \

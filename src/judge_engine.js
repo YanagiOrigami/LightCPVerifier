@@ -106,8 +106,8 @@ export class JudgeEngine {
             args: ['chk', 'in.txt', 'out.txt', 'ans.txt'],
             env: ['PATH=/usr/bin:/bin'],
             files: [{ content: '' }, { name: 'stdout', max: 1024 * 1024 }, { name: 'stderr', max: 1024 * 1024 }],
-            cpuLimit: 2e9,
-            clockLimit: 4e9,
+            cpuLimit: 10e9,
+            clockLimit: 20e9,
             memoryLimit: 256 << 20, 
             procLimit: 10,
             copyIn: {
