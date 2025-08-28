@@ -16,6 +16,18 @@ export class GoJudgeClient {
         return data[0];
     }
 
+    async run(cmds) {
+        // console.dir(cmds, {
+        //     depth: null,              // 无限展开
+        //     maxArrayLength: null,     // 不截断数组
+        //     maxStringLength: null,    // 不截断长字符串
+        //     compact: false,           // 更易读的换行
+        //     breakLength: Infinity     // 避免一行塞太多
+        // });
+        const { data } = await axios.post(`${this.baseURL}/run`, cmds, { timeout: 300000 });
+        return data;
+    }
+
     // 删除文件
     async deleteFile(fileId) {
         try { 
@@ -170,12 +182,12 @@ export class GoJudgeClient {
         const res = await this.runOne({
             args: ['/usr/bin/g++', srcName, '-O2', '-pipe', '-std=gnu++17', '-I', testlibPath, '-o', outName],
             env: ['PATH=/usr/bin:/bin'],
-            files: [{ content: '' }, { name: 'stdout', max: 1024 * 64 }, { name: 'stderr', max: 1024 * 64 }],
+            files: [{ content: '' }, { name: 'stdout', max: 1024 * 1024 }, { name: 'stderr', max: 1024 * 1024 }],
             copyIn: { [srcName]: { content: interactorSourceText } },
             copyOutCached: [outName],
             cpuLimit: 10e9, 
             memoryLimit: 512 << 20, 
-            procLimit: 50,
+            procLimit: 128,
         });
         if (res.status !== 'Accepted') {
             throw new Error(`interactor compile failed: ${res.files?.stderr || res.status}`);
@@ -201,15 +213,15 @@ export class GoJudgeClient {
         return interactorBin;
     }
 
-    async copyInChecker(checkerBinPath, testlibPath = '/lib/testlib', srcName = 'chk.cc') {
-        if (!checkerBinPath) {
-            throw new Error('checkerBinPath is required');
+    async copyInBin(binPath, testlibPath = '/lib/testlib', srcName = 'chk.cc') {
+        if (!binPath) {
+            throw new Error('binPath is required');
         }
-        const checkerId = await this.copyInFile(checkerBinPath);
-        if (!checkerId) {
-            throw new Error('Failed to copy in checker binary');
+        const binId = await this.copyInFile(binPath);
+        if (!binId) {
+            throw new Error('Failed to copy in binary');
         }
-        const cleanup = () => this.deleteFile(checkerId);
-        return { checkerId, cleanup };
+        const cleanup = () => this.deleteFile(binId);
+        return { binId, cleanup };
     }
 }

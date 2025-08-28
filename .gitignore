@@ -5,3 +5,5 @@ problems/
 scripts/*.json
 *.tar.gz
 *.json
+.DS_Store
+.vscode/

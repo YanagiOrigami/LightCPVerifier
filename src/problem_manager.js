@@ -25,9 +25,6 @@ export class ProblemConfig {
         
         // 验证配置类型
         const type = this.config.type || 'default';
-        if (type !== 'default') {
-            throw new Error('Only type=default supported');
-        }
         
         // 验证 subtasks 存在
         if (!this.config.subtasks || !Array.isArray(this.config.subtasks)) {
@@ -102,7 +99,14 @@ export class ProblemConfig {
     }
 
     async loadInteractive() {
-        throw new Error('Interactive problems are not supported for now.');
+        //throw new Error('Interactive problems are not supported for now.');
+        
+         // 交互模式：加载 subtasks
+        await this.loadSubtasks();
+        this.checker = this.config.checker || 'chk.cc';
+        this.interactor = this.config.interactor || 'interactor.cc';
+        //console.log('Loading interactive problem, the interactor is:', this.config.interactor);
+        this.filename = this.config.filename || null;
     }
     
     async loadProblem(pdir) {
@@ -133,6 +137,7 @@ export class ProblemConfig {
             cfg: this.config,
             cases: this.cases,
             checker: this.checker,
+            interactor: this.interactor,
             filename: this.filename
         };
     }
@@ -195,26 +200,16 @@ export class ProblemSetter {
         // 默认配置
         let timeLimit = '2s';
         let memoryLimit = '512m';
+        let mode = 'default';
 
-        let checker_name = null;
-        const candidates = ['checker.cpp', 'checker.cc', 'chk.cpp', 'chk.cc'];
-
-        for (const fname of candidates) {
-            const fpath = path.join(this.dataDir, fname);
-            if (await fileExists(fpath)) {
-                checker_name = fname;
-                break; 
-            }
-        }
-        if (!checker_name) {
-            throw new Error('No checker source file found (expected one of: ' + candidates.join(', ') + ')');
-        }
-        
         // 尝试读取 problem.conf
         const confPath = path.join(this.dataDir, 'problem.conf');
         if (await fileExists(confPath)) {
             console.log('Found problem.conf, parsing...');
             const conf = await parseProblemConf(confPath);
+            if (conf.interaction_mode === 'on') {
+                mode = 'interactive';
+            }
 
             if (conf.time_limit || conf.timelimit) {
                 const timeSec = conf.time_limit || conf.timelimit;
@@ -225,8 +220,37 @@ export class ProblemSetter {
                 const memMB = conf.memory_limit || conf.memorylimit || conf.memory;
                 memoryLimit = `${memMB}m`;
             }
+
         }
-        
+
+        let checker_name;
+        const candidates = ['checker.cpp', 'checker.cc', 'chk.cpp', 'chk.cc'];
+
+        for (const fname of candidates) {
+            const fpath = path.join(this.dataDir, fname);
+            if (await fileExists(fpath)) {
+                checker_name = fname;
+                break; 
+            }
+        }
+        if (!checker_name && mode === 'default') {
+            throw new Error('No checker source file found (expected one of: ' + candidates.join(', ') + ')');
+        }
+
+        let interactor_name;
+        const interactorCandidates = ['interactor.cpp', 'interactor.cc'];
+
+        for (const fname of interactorCandidates) {
+            const fpath = path.join(this.dataDir, fname);
+            if (await fileExists(fpath)) {
+                interactor_name = fname;
+                break;
+            }
+        }
+        if (mode === 'interactive' && !interactor_name) {
+            throw new Error('Interactive mode requires an interactor source file (expected one of: ' + interactorCandidates.join(', ') + ')');
+        }
+
         // 查找测试用例对
         const testCases = await findTestCases(this.dataDir);
         if (testCases.length === 0) {
@@ -264,10 +288,11 @@ export class ProblemSetter {
         
         // 生成 config.yaml
         const config = {
-            type: 'default',
+            type: mode,
             time_limit: timeLimit,
             memory_limit: memoryLimit,
             checker: checker_name,
+            interactor: interactor_name,
             input_prefix: '',
             output_prefix: '',
             input_suffix: '.in',
@@ -285,7 +310,7 @@ export class ProblemSetter {
         await fs.writeFile(configPath, YAML.dump(config), 'utf8');
 
         // 复制其他必要文件（如 checker.cpp, statement.txt 等）
-        const otherFiles = ['checker.cpp', 'statement.txt', 'chk.cc', 'chk.cpp'];
+        const otherFiles = ['checker.cpp', 'statement.txt', config.checker, config.interactor].filter(f => f);
         for (const file of otherFiles) {
             const srcPath = path.join(this.dataDir, file);
             if (await fileExists(srcPath)) {
@@ -396,7 +421,7 @@ export class ProblemManager {
     }
 
     // 读取交互器源码
-    async readInteractorSource(pid, interactorFile = 'interactor.cc') {
+    async readInteractorSource(pid, interactorFile = 'interactor.cpp') {
         const filePath = path.join(this.problemsRoot, pid, interactorFile);
         return await fs.readFile(filePath, 'utf8');
     }
@@ -436,20 +461,33 @@ export class ProblemManager {
             await fs.rm(tmpDir, { recursive: true, force: true });
         }
 
-        let config = null;
+        let config;
         try {
             config = await new ProblemConfig(pdir).loadConfig(path.join(pdir, 'config.yaml'));
         } catch (error) {
             throw new Error(`Failed to load problem config: ${error.message}`);
         }
-        const checker_name = config.checker || null;
-        const checker_source = await this.readCheckerSource(pid, checker_name);
-        try {
-            const checkerBin = await this.goJudge.getCheckerBin(checker_source, config.testlibPath);
-            const checkerBinPath = path.join(pdir, `${checker_name}.bin`);
-            await fs.writeFile(checkerBinPath, checkerBin);
-        } catch (error) {
-            throw new Error(`Failed to get checker binary: ${error.message}`);
+        const checker_name = config.checker || undefined;
+        if (checker_name) {
+            const checker_source = await this.readCheckerSource(pid, checker_name);
+            try {
+                const checkerBin = await this.goJudge.getCheckerBin(checker_source, config.testlibPath);
+                const checkerBinPath = path.join(pdir, `${checker_name}.bin`);
+                await fs.writeFile(checkerBinPath, checkerBin);
+            } catch (error) {
+                throw new Error(`Failed to get checker binary: ${error.message}`);
+            }
+        }
+        const interactor_name = config.interactor || undefined;
+        if (interactor_name) {
+            const interactor_source = await this.readInteractorSource(pid, interactor_name);
+            try {
+                const interactorBin = await this.goJudge.getCheckerBin(interactor_source, config.testlibPath);
+                const interactorBinPath = path.join(pdir, `${interactor_name}.bin`);
+                await fs.writeFile(interactorBinPath, interactorBin);
+            } catch (error) {
+                throw new Error(`Failed to get interactor binary: ${error.message}`);
+            }
         }
 
         await tar.c({
