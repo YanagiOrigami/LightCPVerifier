@@ -5,21 +5,59 @@ import { uploadZip, upload } from './upload.js';
 
 export function createApiRoutes(judgeEngine, problemManager, submissionManager) {
     const router = express.Router();
+    router.use(express.json({ limit: '10mb' }));
+    router.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
     // 提交代码
     router.post('/submit', upload.single('code'), async (req, res) => {
-        const { pid, lang } = req.body || {};
-        const codeBuf = req.file?.buffer;
-        const code = codeBuf?.toString('utf8');
-
-        if (!pid || !lang || !code) {
-            return res.status(400).json({ error: 'pid/lang/code required' });
-        }
         try {
+            const pid = (req.body && req.body.pid) || (req.query && req.query.pid);
+            const langRaw = (req.body && req.body.lang) || (req.query && req.query.lang);
+
+            let code = null;
+
+            // (a) multipart 文件字段：code=@file
+            if (req.file && req.file.buffer) {
+                code = req.file.buffer.toString('utf8');
+            }
+
+            // (b) 文本字段：multipart 文本 / x-www-form-urlencoded / JSON
+            if (!code && typeof req.body?.code === 'string') {
+                code = req.body.code;
+            }
+
+            // (c) JSON 里的 base64 备用
+            if (!code && typeof req.body?.codeBase64 === 'string') {
+                try {
+                    code = Buffer.from(req.body.codeBase64, 'base64').toString('utf8');
+                } catch { /* ignore */ }
+            }
+
+            // (d) 若启用了 express.text，并且 Content-Type 是 text/*，整个 body 即源码
+            if (!code && typeof req.body === 'string' && req.is && req.is('text/*')) {
+                code = req.body;
+            }
+
+            // 3) 语言归一化（按你评测机的枚举调整）
+            const langMap = {
+                'c++': 'cpp', 'cpp': 'cpp', 'cxx': 'cpp', 'g++': 'cpp', 'cpp17': 'cpp', 'gnu++17': 'cpp',
+                'python': 'py', 'py': 'py', 'python3': 'py', 'py3': 'py'
+            };
+            const lang = langMap[(langRaw || '').toLowerCase()] || langRaw;
+
+            // 4) 校验
+            if (!pid || !lang || !code) {
+                return res.status(400).json({
+                    error: 'pid/lang/code required',
+                    hint: 'please try json as the easist way.'
+                });
+            }
+
+            // 5) 提交
             const sid = await judgeEngine.submit(pid, lang, code);
-            res.json({ sid });
+            return res.json({ sid });
         } catch (error) {
-            res.status(500).json({ error: 'Submit failed', message: error.message });
+            return res.status(500).json({ error: 'Submit failed', message: error.message });
         }
     });
 
