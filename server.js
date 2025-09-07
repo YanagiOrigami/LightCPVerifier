@@ -26,11 +26,11 @@ await fs.mkdir(config.dataRoot, { recursive: true });
 await fs.mkdir(config.submissionsRoot, { recursive: true });
 
 // 初始化各模块
-const submissionManager = new SubmissionManager(
+const submissionManager = await new SubmissionManager(
     config.dataRoot, 
     config.submissionsRoot, 
     config.bucketSize
-);
+).init();
 
 const problemManager = new ProblemManager({
     problemsRoot: config.problemsRoot,

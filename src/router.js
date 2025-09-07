@@ -138,12 +138,12 @@ export function createApiRoutes(judgeEngine, problemManager, submissionManager) 
     // 重置 submissions
     router.post('/submissions/reset', async (req, res) => {
         try {
+            judgeEngine.queue = [];
+            judgeEngine.clearResults();
+
             await emptyDir(submissionManager.submissionsRoot);
             await submissionManager.resetCounter();
-
-            // 清空内存中的结果缓存
-            judgeEngine.clearResults();
-            
+        
             res.json({
                 success: true,
                 message: 'Submissions reset successfully'
