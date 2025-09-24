@@ -391,8 +391,16 @@ export class JudgeEngine {
             } else {
                 await fs.writeFile(path.join(subDir, 'source.code'), code);
             }
-            
-            const problem = await this.problemManager.loadProblem(pid);
+
+            let problem;
+            try {
+                problem = await this.problemManager.loadProblem(pid);
+            } catch (e) {
+                const err = { status: 'error', error: `Load problem failed: ${e.message}` };
+                this.results.set(sid, err);
+                await fs.writeFile(path.join(subDir, 'result.json'), JSON.stringify(err, null, 2));
+                continue;
+            }
 
             switch (problem.cfg.type) {
                 case 'interactive':
