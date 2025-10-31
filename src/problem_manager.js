@@ -491,11 +491,9 @@ export class ProblemManager {
         }
 
         // 打包成 tar.gz
-        await tar.c({
-            gzip: true,
-            cwd: pdir,  // 👈 改变工作目录
-            file: path.join(pdir, `${pid}.tar.gz`)
-        }, ['.']);
+        const tarPath = path.join(pdir, `${pid}.tar.gz`);
+        await fs.rm(tarPath, { force: true }); // 安全删除旧包
+        await tar.c({ gzip: true, cwd: pdir, file: tarPath }, ['.']);
         return { message: 'Problem setup completed successfully', pid };
     }
 
