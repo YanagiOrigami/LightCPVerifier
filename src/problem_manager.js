@@ -490,12 +490,12 @@ export class ProblemManager {
             }
         }
 
+        // 打包成 tar.gz
         await tar.c({
             gzip: true,
-            file: path.join(pdir, `${pid}.tar.gz`)  // 就是输出位置
-        },
-        [pdir]
-        );
+            cwd: pdir,  // 👈 改变工作目录
+            file: path.join(pdir, `${pid}.tar.gz`)
+        }, ['.']);
         return { message: 'Problem setup completed successfully', pid };
     }
 
